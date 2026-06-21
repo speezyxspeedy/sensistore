@@ -1,0 +1,19 @@
+rules_version = '2';
+
+service firebase.storage {
+  match /b/{bucket}/o {
+    function isAdmin() {
+      return request.auth != null
+        && request.auth.token.email == 'bglspeedy@gmail.com';
+    }
+
+    match /order-uploads/{userId}/{draftId}/{fileName} {
+      allow create: if request.auth != null
+        && request.auth.uid == userId
+        && request.resource.size < 5 * 1024 * 1024
+        && request.resource.contentType.matches('image/(jpeg|png|webp)');
+      allow read: if request.auth != null && (request.auth.uid == userId || isAdmin());
+      allow update, delete: if false;
+    }
+  }
+}

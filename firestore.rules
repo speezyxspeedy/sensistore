@@ -1,0 +1,22 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() { return request.auth != null; }
+    function isAdmin() {
+      return signedIn()
+        && request.auth.token.email == 'bglspeedy@gmail.com';
+    }
+
+    match /orders/{orderId} {
+      allow get: if signedIn() && (resource.data.userId == request.auth.uid || isAdmin());
+      allow list: if signedIn() && (isAdmin() || resource.data.userId == request.auth.uid);
+      // All payment and status mutations go through Vercel server functions.
+      // Firebase Admin SDK re-verifies the admin document and bypasses client rules.
+      allow create, update, delete: if false;
+    }
+
+    match /paymentSessions/{sessionId} { allow read, write: if false; }
+    match /rateLimits/{limitId} { allow read, write: if false; }
+  }
+}

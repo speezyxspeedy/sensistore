@@ -1,0 +1,42 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Rajdhani:wght@600;700&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html { scroll-behavior: smooth; }
+  body { @apply m-0 min-w-[320px] bg-ink font-sans text-slate-200 antialiased; }
+  ::selection { @apply bg-lime text-ink; }
+}
+
+@layer components {
+  .container-shell { @apply mx-auto w-full max-w-7xl px-5 sm:px-8 lg:px-10; }
+  .eyebrow { @apply inline-flex items-center gap-2 rounded-full border border-lime/20 bg-lime/[0.06] px-3 py-1.5 text-[11px] font-bold uppercase tracking-[0.2em] text-lime; }
+  .display-title { @apply font-display text-4xl font-bold uppercase leading-[0.92] tracking-tight text-white sm:text-5xl lg:text-7xl; }
+  .glass-panel { @apply border border-white/[0.08] bg-panel/80 backdrop-blur-xl; }
+  .input-field { @apply w-full rounded-xl border border-white/10 bg-white/[0.035] px-4 py-3.5 text-sm text-white outline-none transition placeholder:text-slate-600 focus:border-lime/60 focus:bg-lime/[0.025] focus:ring-2 focus:ring-lime/10; }
+  .label { @apply mb-2 block text-xs font-semibold uppercase tracking-[0.12em] text-slate-400; }
+  .btn-primary { @apply inline-flex items-center justify-center gap-2 rounded-xl bg-lime px-5 py-3.5 text-sm font-extrabold uppercase tracking-wide text-ink transition duration-300 hover:-translate-y-0.5 hover:bg-[#ceff71] hover:shadow-glow active:translate-y-0; }
+  .btn-secondary { @apply inline-flex items-center justify-center gap-2 rounded-xl border border-white/10 bg-white/[0.04] px-5 py-3.5 text-sm font-bold uppercase tracking-wide text-white transition hover:border-white/25 hover:bg-white/[0.07]; }
+}
+
+::-webkit-scrollbar { width: 8px; }
+::-webkit-scrollbar-track { background: #05070c; }
+::-webkit-scrollbar-thumb { border-radius: 999px; background: #26303d; }
+::-webkit-scrollbar-thumb:hover { background: #22d3ee; }
+
+.noise::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  opacity: .025;
+  pointer-events: none;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 180 180' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='.8'/%3E%3C/svg%3E");
+}
+
+.scanline { animation: scan 4s linear infinite; }
+@keyframes scan { from { transform: translateY(-10px); } to { transform: translateY(350px); } }
+
+.pulse-dot { animation: pulseDot 2s ease-in-out infinite; }
+@keyframes pulseDot { 50% { box-shadow: 0 0 0 7px rgba(34,211,238,0); } 0%, 100% { box-shadow: 0 0 0 0 rgba(34,211,238,.35); } }
