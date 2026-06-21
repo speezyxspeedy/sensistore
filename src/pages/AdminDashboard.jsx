@@ -6,7 +6,7 @@ import { useNavigate } from 'react-router-dom'
 import { toast } from 'react-toastify'
 import { auth } from '../firebase'
 import { copyCustomerValue, ORDER_STATUSES, PAYMENT_STATUSES, resolveScreenshotUrl, subscribeToOrders, updateAdminOrder } from '../services/orderService'
-import { getLocalAuthUsers, LOCAL_AUTH_USERS_EVENT, LOCAL_AUTH_USERS_KEY } from '../services/localUserService'
+import { getUsers, USERS_CHANGED_EVENT, USERS_STORAGE_KEY } from '../services/authService'
 import { ADMIN_EMAIL } from '../utils/adminAuth'
 
 const paymentStyles = { Pending: 'border-amber-400/20 bg-amber-400/10 text-amber-300', Paid: 'border-lime/20 bg-lime/10 text-lime', Failed: 'border-red-400/20 bg-red-400/10 text-red-300' }
@@ -14,7 +14,7 @@ const orderStyles = { Pending: 'border-slate-400/20 bg-slate-400/10 text-slate-3
 
 export default function AdminDashboard() {
   const [orders, setOrders] = useState([])
-  const [localUsers, setLocalUsers] = useState(() => getLocalAuthUsers())
+  const [localUsers, setLocalUsers] = useState(() => getUsers())
   const [loading, setLoading] = useState(true)
   const [filters, setFilters] = useState({ search: '', payment: 'All', order: 'All', plan: 'All' })
   const [updating, setUpdating] = useState('')
@@ -25,13 +25,13 @@ export default function AdminDashboard() {
 
   useEffect(() => {
     const refreshUsers = (event) => {
-      if (!event?.key || event.key === LOCAL_AUTH_USERS_KEY) setLocalUsers(getLocalAuthUsers())
+      if (!event?.key || event.key === USERS_STORAGE_KEY) setLocalUsers(getUsers())
     }
     window.addEventListener('storage', refreshUsers)
-    window.addEventListener(LOCAL_AUTH_USERS_EVENT, refreshUsers)
+    window.addEventListener(USERS_CHANGED_EVENT, refreshUsers)
     return () => {
       window.removeEventListener('storage', refreshUsers)
-      window.removeEventListener(LOCAL_AUTH_USERS_EVENT, refreshUsers)
+      window.removeEventListener(USERS_CHANGED_EVENT, refreshUsers)
     }
   }, [])
 
@@ -67,7 +67,7 @@ export default function AdminDashboard() {
           totalOrders: userOrders.length,
         }
       })
-      .sort((a, b) => new Date(b.joinedAt || 0) - new Date(a.joinedAt || 0))
+      .sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0))
   }, [localUsers, orders])
 
   const stats = useMemo(() => ({
@@ -101,7 +101,7 @@ export default function AdminDashboard() {
 
 function StatCard({ icon: Icon, label, value, color = 'text-white' }) { return <div className="rounded-xl border border-white/[0.07] bg-panel/80 p-4"><div className="flex items-center justify-between"><p className="text-[9px] font-bold uppercase tracking-[.13em] text-slate-600">{label}</p><Icon size={15} className={color} /></div><p className={`mt-3 font-display text-3xl font-bold ${color}`}>{value}</p></div> }
 
-function UsersTable({ users }) { return <section id="users" className="glass-panel mt-7 scroll-mt-24 overflow-hidden rounded-2xl"><header className="flex items-center justify-between border-b border-white/[0.07] p-5 sm:p-6"><div><p className="text-[10px] font-bold uppercase tracking-[.2em] text-cyan-300">Customer management</p><h2 className="mt-1 font-display text-2xl font-bold uppercase text-white">Registered users</h2></div><span className="rounded-full border border-cyan-400/20 bg-cyan-400/10 px-3 py-1.5 text-[10px] font-bold text-cyan-300">{users.length} USERS</span></header>{users.length === 0 ? <div className="grid min-h-52 place-items-center px-5 text-center"><div><Users className="mx-auto text-slate-700" size={36} /><p className="mt-3 text-sm font-semibold text-slate-300">No local users registered yet</p><p className="mt-1 text-xs text-slate-600">Customers appear after a successful signup or login in this browser.</p></div></div> : <><div className="hidden overflow-x-auto md:block"><table className="w-full text-left"><thead><tr className="border-b border-white/[0.06] text-[9px] uppercase tracking-[.14em] text-slate-600">{['Name', 'Email', 'Phone / WhatsApp', 'Joined Date', 'Total Orders'].map((column) => <th key={column} className="px-5 py-4 font-bold">{column}</th>)}</tr></thead><tbody>{users.map((user) => <tr key={user.email} className="border-b border-white/[0.05] text-xs transition last:border-0 hover:bg-white/[0.018]"><td className="px-5 py-4 font-semibold text-white">{user.name}</td><td className="px-5 py-4"><a href={`mailto:${user.email}`} className="text-slate-400 transition hover:text-cyan-300">{user.email}</a></td><td className="px-5 py-4">{user.phone ? <a href={`tel:${user.phone}`} className="text-slate-400 transition hover:text-lime">{user.phone}</a> : <span className="text-slate-700">Not available</span>}</td><td className="px-5 py-4 text-slate-500">{formatJoinedDate(user.joinedAt)}</td><td className="px-5 py-4"><span className="inline-flex min-w-8 justify-center rounded-full border border-violet-400/20 bg-violet-400/10 px-2.5 py-1 font-bold text-violet-300">{user.totalOrders}</span></td></tr>)}</tbody></table></div><div className="divide-y divide-white/[0.06] md:hidden">{users.map((user) => <article key={user.email} className="p-5"><div className="flex items-start justify-between gap-4"><div className="min-w-0"><p className="font-display text-lg font-bold text-white">{user.name}</p><a href={`mailto:${user.email}`} className="mt-1 block truncate text-xs text-cyan-300">{user.email}</a></div><span className="shrink-0 rounded-full border border-violet-400/20 bg-violet-400/10 px-2.5 py-1 text-[10px] font-bold text-violet-300">{user.totalOrders} orders</span></div><div className="mt-4 grid grid-cols-2 gap-3 rounded-xl bg-white/[0.025] p-3"><Info label="WhatsApp" value={user.phone || 'Not available'} /><Info label="Joined" value={formatJoinedDate(user.joinedAt)} /></div></article>)}</div></>}</section> }
+function UsersTable({ users }) { return <section id="users" className="glass-panel mt-7 scroll-mt-24 overflow-hidden rounded-2xl"><header className="flex items-center justify-between border-b border-white/[0.07] p-5 sm:p-6"><div><p className="text-[10px] font-bold uppercase tracking-[.2em] text-cyan-300">Customer management</p><h2 className="mt-1 font-display text-2xl font-bold uppercase text-white">Registered users</h2></div><span className="rounded-full border border-cyan-400/20 bg-cyan-400/10 px-3 py-1.5 text-[10px] font-bold text-cyan-300">{users.length} USERS</span></header>{users.length === 0 ? <div className="grid min-h-52 place-items-center px-5 text-center"><div><Users className="mx-auto text-slate-700" size={36} /><p className="mt-3 text-sm font-semibold text-slate-300">No local users registered yet</p><p className="mt-1 text-xs text-slate-600">Customers appear after a successful signup or login in this browser.</p></div></div> : <><div className="hidden overflow-x-auto md:block"><table className="w-full text-left"><thead><tr className="border-b border-white/[0.06] text-[9px] uppercase tracking-[.14em] text-slate-600">{['Name', 'Email', 'Phone / WhatsApp', 'Joined Date', 'Total Orders'].map((column) => <th key={column} className="px-5 py-4 font-bold">{column}</th>)}</tr></thead><tbody>{users.map((user) => <tr key={user.email} className="border-b border-white/[0.05] text-xs transition last:border-0 hover:bg-white/[0.018]"><td className="px-5 py-4 font-semibold text-white">{user.name}</td><td className="px-5 py-4"><a href={`mailto:${user.email}`} className="text-slate-400 transition hover:text-cyan-300">{user.email}</a></td><td className="px-5 py-4">{user.phone ? <a href={`tel:${user.phone}`} className="text-slate-400 transition hover:text-lime">{user.phone}</a> : <span className="text-slate-700">Not available</span>}</td><td className="px-5 py-4 text-slate-500">{formatJoinedDate(user.createdAt)}</td><td className="px-5 py-4"><span className="inline-flex min-w-8 justify-center rounded-full border border-violet-400/20 bg-violet-400/10 px-2.5 py-1 font-bold text-violet-300">{user.totalOrders}</span></td></tr>)}</tbody></table></div><div className="divide-y divide-white/[0.06] md:hidden">{users.map((user) => <article key={user.email} className="p-5"><div className="flex items-start justify-between gap-4"><div className="min-w-0"><p className="font-display text-lg font-bold text-white">{user.name}</p><a href={`mailto:${user.email}`} className="mt-1 block truncate text-xs text-cyan-300">{user.email}</a></div><span className="shrink-0 rounded-full border border-violet-400/20 bg-violet-400/10 px-2.5 py-1 text-[10px] font-bold text-violet-300">{user.totalOrders} orders</span></div><div className="mt-4 grid grid-cols-2 gap-3 rounded-xl bg-white/[0.025] p-3"><Info label="WhatsApp" value={user.phone || 'Not available'} /><Info label="Joined" value={formatJoinedDate(user.createdAt)} /></div></article>)}</div></>}</section> }
 
 function FilterSelect({ value, onChange, label, options, pairs = false }) { return <div className="relative"><select aria-label={label} value={value} onChange={(event) => onChange(event.target.value)} className="input-field appearance-none !py-2.5 pr-9"><option value="All">All {label}</option>{options.map((option) => { const [valueOption, labelOption] = pairs ? option : [option, option]; return <option key={valueOption} value={valueOption} className="bg-panel">{labelOption}</option> })}</select><ChevronDown className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-slate-500" size={15} /></div> }
 

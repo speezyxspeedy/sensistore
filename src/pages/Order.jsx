@@ -9,7 +9,7 @@ import { PLANS, PLAN_LIST } from '../data/plans'
 import { firebaseConfigurationMessage, isFirebaseConfigured } from '../firebase'
 import { createOrder, createOrderId } from '../services/orderService'
 import { createPaymentOrder } from '../services/paymentService'
-import { updateLocalAuthUser } from '../services/localUserService'
+import { saveUser } from '../services/authService'
 
 const RAM_OPTIONS = ['2 GB', '3 GB', '4 GB', '6 GB', '8 GB', '12 GB', '16 GB+']
 const GAMES = ['BGMI', 'PUBG Mobile', 'Free Fire', 'Free Fire MAX', 'COD Mobile', 'Other']
@@ -53,7 +53,7 @@ export default function Order() {
         sensiScreenshot,
         orderId,
       })
-      updateLocalAuthUser(user.email, { name: form.customerName, phone: form.phone })
+      saveUser({ id: user.uid, name: form.customerName, email: user.email, phone: form.phone, role: 'customer', createdAt: user.metadata?.creationTime })
       toast.success(`Order ${order.orderId} submitted for payment verification.`)
       navigate('/dashboard', { replace: true })
     } catch (error) {
