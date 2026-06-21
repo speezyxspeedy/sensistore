@@ -1,9 +1,33 @@
-import { collection, doc, onSnapshot, orderBy, query, serverTimestamp, setDoc, updateDoc, where } from 'firebase/firestore'
+import { collection, doc, onSnapshot, query, serverTimestamp, setDoc, updateDoc, where } from 'firebase/firestore'
 import { getDownloadURL, ref, uploadBytes } from 'firebase/storage'
 import { db, storage } from '../firebase'
 
 export const PAYMENT_STATUSES = ['Pending', 'Paid', 'Failed']
 export const ORDER_STATUSES = ['Pending', 'Processing', 'Delivered']
+export const ORDERS_STORAGE_KEY = 'sensi_orders'
+export const ORDERS_CHANGED_EVENT = 'sensi-orders-changed'
+
+export function getStoredOrders() {
+  if (typeof window === 'undefined') return []
+  try {
+    const orders = JSON.parse(window.localStorage.getItem(ORDERS_STORAGE_KEY) || '[]')
+    return Array.isArray(orders)
+      ? orders.map((order) => normalizeOrder(order.id || order.orderId, order)).sort((a, b) => timestampMillis(b.createdAt) - timestampMillis(a.createdAt))
+      : []
+  } catch {
+    return []
+  }
+}
+
+function saveStoredOrder(order) {
+  const orders = getStoredOrders()
+  const existing = orders.some((item) => item.id === order.id || item.orderId === order.orderId)
+  const nextOrders = existing
+    ? orders.map((item) => item.id === order.id || item.orderId === order.orderId ? { ...item, ...order } : item)
+    : [order, ...orders]
+  window.localStorage.setItem(ORDERS_STORAGE_KEY, JSON.stringify(nextOrders))
+  window.dispatchEvent(new CustomEvent(ORDERS_CHANGED_EVENT))
+}
 
 function safeFileName(name) {
   return name.toLowerCase().replace(/[^a-z0-9._-]/g, '-').slice(-80)
@@ -55,7 +79,9 @@ export async function createOrder({ user, form, plan, payment, hudScreenshot, se
     updatedAt: serverTimestamp(),
   }
   await setDoc(doc(db, 'orders', orderId), order)
-  return { ...order, createdAt: new Date(), updatedAt: new Date() }
+  const storedOrder = { ...order, id: orderId, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() }
+  saveStoredOrder(storedOrder)
+  return storedOrder
 }
 
 export function subscribeToUserOrders(uid, onOrders, onError) {
@@ -67,19 +93,14 @@ export function subscribeToUserOrders(uid, onOrders, onError) {
   }, onError)
 }
 
-export function subscribeToOrders(onOrders, onError) {
-  const allOrders = query(collection(db, 'orders'), orderBy('createdAt', 'desc'))
-  return onSnapshot(allOrders, (snapshot) => {
-    onOrders(snapshot.docs.map((item) => normalizeOrder(item.id, item.data())))
-  }, onError)
-}
-
 export async function updateAdminOrder(orderId, changes) {
   const allowed = {}
   if (changes.paymentStatus && PAYMENT_STATUSES.includes(changes.paymentStatus)) allowed.paymentStatus = changes.paymentStatus
   if (changes.orderStatus && ORDER_STATUSES.includes(changes.orderStatus)) allowed.orderStatus = changes.orderStatus
   if (!Object.keys(allowed).length) throw new Error('No valid order changes were provided.')
   await updateDoc(doc(db, 'orders', orderId), { ...allowed, updatedAt: serverTimestamp() })
+  const existing = getStoredOrders().find((order) => order.id === orderId || order.orderId === orderId)
+  if (existing) saveStoredOrder({ ...existing, ...allowed, updatedAt: new Date().toISOString() })
   return { orderId, ...allowed }
 }
 
@@ -138,5 +159,6 @@ function normalizeOrderStatus(status) {
 function timestampMillis(value) {
   if (value?.toMillis) return value.toMillis()
   if (value instanceof Date) return value.getTime()
-  return 0
+  const parsed = new Date(value).getTime()
+  return Number.isNaN(parsed) ? 0 : parsed
 }

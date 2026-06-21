@@ -1,4 +1,5 @@
 import { ADMIN_EMAIL } from '../utils/adminAuth'
+import { auth } from '../firebase'
 
 export const USERS_STORAGE_KEY = 'sensi_users'
 export const USERS_CHANGED_EVENT = 'sensi-users-changed'
@@ -68,9 +69,12 @@ function migrateUsers() {
 }
 
 export function getUsers() {
-  const users = migrateUsers()
-  console.log("Loaded users:", users)
-  return users
+  if (typeof window === 'undefined') return []
+  migrateUsers()
+  const users = JSON.parse(localStorage.getItem("sensi_users") || "[]")
+  console.log("sensi_users", localStorage.getItem("sensi_users"))
+  console.log("loaded users", users)
+  return Array.isArray(users) ? users.filter((user) => user.role !== 'admin' && normalizeEmail(user.email) !== ADMIN_EMAIL) : []
 }
 
 export function saveUser(user) {
@@ -95,4 +99,10 @@ export function registerUser(user) {
     password: '',
     createdAt: user.createdAt || new Date().toISOString(),
   })
+}
+
+export function getCurrentUser() {
+  const firebaseUser = auth.currentUser
+  if (!firebaseUser?.email) return null
+  return getUsers().find((user) => user.email === normalizeEmail(firebaseUser.email)) || firebaseUser
 }

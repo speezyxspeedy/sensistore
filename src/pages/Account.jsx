@@ -6,6 +6,7 @@ import { toast } from 'react-toastify'
 import { useAuth } from '../contexts/auth-context'
 import { firebaseConfigurationMessage, getFirebaseErrorDetails, isFirebaseConfigured } from '../firebase'
 import { isAdmin } from '../utils/adminAuth'
+import { getCurrentUser, registerUser } from '../services/authService'
 
 export default function Account() {
   const [mode, setMode] = useState('login')
@@ -17,9 +18,10 @@ export default function Account() {
   const navigate = useNavigate()
 
   useEffect(() => {
-    if (!user) return
+    const currentUser = user || getCurrentUser()
+    if (!currentUser) return
     const requestedPath = searchParams.get('redirect')
-    navigate(isAdmin(user) ? '/admin' : requestedPath?.startsWith('/') ? requestedPath : '/dashboard', { replace: true })
+    navigate(isAdmin(currentUser) ? '/admin' : requestedPath?.startsWith('/') ? requestedPath : '/dashboard', { replace: true })
   }, [user, navigate, searchParams])
 
   const showError = (error) => {
@@ -42,6 +44,15 @@ export default function Account() {
       const authenticatedUser = mode === 'register'
         ? await signup(form)
         : await login(form.email, form.password)
+      if (mode === 'register') registerUser({
+        id: authenticatedUser.uid,
+        name: form.name,
+        email: authenticatedUser.email,
+        phone: form.phone,
+        password: '',
+        role: 'customer',
+        createdAt: authenticatedUser.metadata?.creationTime,
+      })
       toast.success(mode === 'register' ? 'Account created successfully.' : 'Signed in successfully.')
       navigate(isAdmin(authenticatedUser) ? '/admin' : '/dashboard', { replace: true })
     } catch (error) {
