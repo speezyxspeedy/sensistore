@@ -1,5 +1,8 @@
 {
   "framework": "vite",
+  "env": {
+    "APP_URL": "https://sensistore-one.vercel.app"
+  },
   "rewrites": [
     { "source": "/api/(.*)", "destination": "/api/$1" },
     { "source": "/(.*)", "destination": "/index.html" }

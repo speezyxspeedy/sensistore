@@ -60,7 +60,7 @@ Use any SMTP provider supported by Nodemailer. Configure `SMTP_HOST`, `SMTP_PORT
 1. Push the project to GitHub/GitLab/Bitbucket.
 2. Import it in Vercel. Framework Preset: Vite.
 3. Add all `.env.example` variables to Project Settings → Environment Variables. Never expose server secrets with a `VITE_` prefix.
-4. Deploy and update `APP_URL` to the final HTTPS domain.
+4. Production app URL: `https://sensistore-one.vercel.app`. Keep `APP_URL` and `VITE_APP_URL` set to this address in Vercel.
 5. Add the final domain to Firebase Authentication → Authorized domains.
 6. Deploy Firebase rules and register the production BharatPe webhook.
 7. Run a real end-to-end low-value payment test and verify Firestore order creation plus both emails.
