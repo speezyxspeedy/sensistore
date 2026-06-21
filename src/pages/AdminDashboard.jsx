@@ -5,7 +5,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { toast } from 'react-toastify'
 import { auth } from '../firebase'
-import { copyCustomerValue, ORDER_STATUSES, PAYMENT_STATUSES, resolveScreenshotUrl, subscribeToOrders, updateAdminOrder } from '../services/adminOrderService'
+import { copyCustomerValue, ORDER_STATUSES, PAYMENT_STATUSES, resolveScreenshotUrl, subscribeToOrders, updateAdminOrder } from '../services/orderService'
 
 const paymentStyles = { Pending: 'border-amber-400/20 bg-amber-400/10 text-amber-300', Paid: 'border-lime/20 bg-lime/10 text-lime', Failed: 'border-red-400/20 bg-red-400/10 text-red-300' }
 const orderStyles = { Pending: 'border-slate-400/20 bg-slate-400/10 text-slate-300', Processing: 'border-blue-400/20 bg-blue-400/10 text-blue-300', Delivered: 'border-violet-400/20 bg-violet-400/10 text-violet-300' }
@@ -18,7 +18,7 @@ export default function AdminDashboard() {
   const [selectedOrder, setSelectedOrder] = useState(null)
   const navigate = useNavigate()
 
-  useEffect(() => subscribeToOrders((nextOrders) => { setOrders(nextOrders); setLoading(false) }, (error) => { console.error(error); toast.error('Orders could not be loaded. Check Firestore rules.'); setLoading(false) }), [])
+  useEffect(() => subscribeToOrders((nextOrders) => { setOrders(nextOrders); setLoading(false) }, (error) => { console.error(error); toast.error(`${error.code || 'firestore/error'}: ${error.message}`); setLoading(false) }), [])
 
   const filteredOrders = useMemo(() => {
     const search = filters.search.trim().toLowerCase()

@@ -12,9 +12,8 @@ const AdminLogin = lazy(() => import('./pages/AdminLogin'))
 const AdminDashboard = lazy(() => import('./pages/AdminDashboard'))
 const Pricing = lazy(() => import('./pages/Pricing'))
 const Account = lazy(() => import('./pages/Account'))
-const CustomerDashboard = lazy(() => import('./pages/CustomerDashboard'))
+const Dashboard = lazy(() => import('./pages/Dashboard'))
 const PaymentReturn = lazy(() => import('./pages/PaymentReturn'))
-const Payment = lazy(() => import('./pages/Payment'))
 const Contact = lazy(() => import('./pages/Contact'))
 const Legal = lazy(() => import('./pages/Legal'))
 
@@ -31,8 +30,8 @@ export default function App() {
             <Route path="/pricing" element={<Pricing />} />
             <Route path="/order" element={<ProtectedRoute><Order /></ProtectedRoute>} />
             <Route path="/payment/return" element={<ProtectedRoute><PaymentReturn /></ProtectedRoute>} />
-            <Route path="/payment" element={<ProtectedRoute><Payment /></ProtectedRoute>} />
-            <Route path="/dashboard" element={<ProtectedRoute><CustomerDashboard /></ProtectedRoute>} />
+            <Route path="/payment" element={<Navigate to="/order" replace />} />
+            <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
             <Route path="/account" element={<Account />} />
             <Route path="/admin/login" element={<AdminLogin />} />
             <Route path="/admin" element={<AdminRoute><AdminDashboard /></AdminRoute>} />
