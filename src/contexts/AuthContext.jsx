@@ -4,12 +4,14 @@ import { doc, serverTimestamp, setDoc } from 'firebase/firestore'
 import { auth, db } from '../firebase'
 import { AuthContext } from './auth-context'
 import { isAdmin as checkIsAdmin } from '../utils/adminAuth'
+import { upsertLocalAuthUser } from '../services/localUserService'
 
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null)
   const [loading, setLoading] = useState(true)
 
   useEffect(() => onAuthStateChanged(auth, (nextUser) => {
+    if (nextUser && !checkIsAdmin(nextUser)) upsertLocalAuthUser(nextUser)
     setUser(nextUser)
     setLoading(false)
   }, () => {
@@ -21,6 +23,7 @@ export function AuthProvider({ children }) {
     const credential = await createUserWithEmailAndPassword(auth, email.trim(), password)
     const cleanName = name.trim()
     await updateProfile(credential.user, { displayName: cleanName })
+    if (!checkIsAdmin(credential.user)) upsertLocalAuthUser(credential.user, { name: cleanName })
     await setDoc(doc(db, 'users', credential.user.uid), {
       uid: credential.user.uid,
       name: cleanName,

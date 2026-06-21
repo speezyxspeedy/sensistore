@@ -15,7 +15,7 @@ const adminLinks = [
   { label: 'Admin Dashboard', to: '/admin', icon: LayoutDashboard },
   { label: 'Orders', to: '/admin#orders', icon: PackageSearch },
   { label: 'Revenue', to: '/admin#revenue', icon: IndianRupee },
-  { label: 'Customer Management', to: '/admin#customers', icon: Users },
+  { label: 'Customer Management', to: '/admin#users', icon: Users },
 ]
 
 export default function Navbar() {

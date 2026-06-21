@@ -36,7 +36,7 @@ export async function createOrder({ user, form, plan, payment, hudScreenshot, se
     orderId,
     uid: user.uid,
     customerName: form.customerName.trim(),
-    email: user.email.trim().toLowerCase(),
+    email: user.email.trim(),
     phone: form.phone.trim(),
     deviceName: form.deviceName.trim(),
     deviceModel: form.deviceModel.trim(),

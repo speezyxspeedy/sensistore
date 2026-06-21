@@ -3,4 +3,5 @@ dist
 .env
 .env.local
 *.log
+.vite-check.*
 .DS_Store
