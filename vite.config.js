@@ -8,7 +8,6 @@ export default defineConfig({
     rollupOptions: {
       output: {
         manualChunks(id) {
-          if (id.includes('node_modules/firebase') || id.includes('node_modules/@firebase')) return 'firebase'
           if (id.includes('node_modules/framer-motion')) return 'motion'
           if (id.includes('node_modules/react')) return 'react-vendor'
         },

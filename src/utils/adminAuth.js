@@ -4,7 +4,7 @@ const configuredAdminEmail = String(import.meta.env.VITE_ADMIN_EMAIL || LOCKED_A
   .trim()
   .toLowerCase()
 
-// Firestore rules enforce this address again at the data layer.
+// Supabase row-level security enforces this address again at the data layer.
 export const ADMIN_EMAIL = configuredAdminEmail === LOCKED_ADMIN_EMAIL
   ? configuredAdminEmail
   : LOCKED_ADMIN_EMAIL

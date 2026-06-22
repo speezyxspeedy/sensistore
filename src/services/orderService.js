@@ -1,37 +1,7 @@
-import { collection, doc, onSnapshot, query, serverTimestamp, setDoc, updateDoc, where } from 'firebase/firestore'
-import { getDownloadURL, ref, uploadBytes } from 'firebase/storage'
-import { db, storage } from '../firebase'
+import { assertSupabaseConfigured, supabase } from '../lib/supabase'
 
 export const PAYMENT_STATUSES = ['Pending', 'Paid', 'Failed']
 export const ORDER_STATUSES = ['Pending', 'Processing', 'Delivered']
-export const ORDERS_STORAGE_KEY = 'sensi_orders'
-export const ORDERS_CHANGED_EVENT = 'sensi-orders-changed'
-
-export function getStoredOrders() {
-  if (typeof window === 'undefined') return []
-  try {
-    const orders = JSON.parse(window.localStorage.getItem(ORDERS_STORAGE_KEY) || '[]')
-    return Array.isArray(orders)
-      ? orders.map((order) => normalizeOrder(order.id || order.orderId, order)).sort((a, b) => timestampMillis(b.createdAt) - timestampMillis(a.createdAt))
-      : []
-  } catch {
-    return []
-  }
-}
-
-function saveStoredOrder(order) {
-  const orders = getStoredOrders()
-  const existing = orders.some((item) => item.id === order.id || item.orderId === order.orderId)
-  const nextOrders = existing
-    ? orders.map((item) => item.id === order.id || item.orderId === order.orderId ? { ...item, ...order } : item)
-    : [order, ...orders]
-  window.localStorage.setItem(ORDERS_STORAGE_KEY, JSON.stringify(nextOrders))
-  window.dispatchEvent(new CustomEvent(ORDERS_CHANGED_EVENT))
-}
-
-function safeFileName(name) {
-  return name.toLowerCase().replace(/[^a-z0-9._-]/g, '-').slice(-80)
-}
 
 export function createOrderId() {
   const date = new Date().toISOString().slice(0, 10).replaceAll('-', '')
@@ -40,74 +10,54 @@ export function createOrderId() {
   return `SS-${date}-${suffix}`
 }
 
-export async function uploadOrderScreenshots({ uid, orderId, hudScreenshot, sensiScreenshot }) {
-  const folder = `order-uploads/${uid}/${orderId}`
-  const [hudUpload, sensiUpload] = await Promise.all([
-    uploadBytes(ref(storage, `${folder}/hud-${safeFileName(hudScreenshot.name)}`), hudScreenshot, { contentType: hudScreenshot.type, customMetadata: { ownerId: uid, orderId } }),
-    uploadBytes(ref(storage, `${folder}/sensitivity-${safeFileName(sensiScreenshot.name)}`), sensiScreenshot, { contentType: sensiScreenshot.type, customMetadata: { ownerId: uid, orderId } }),
-  ])
-  const [hudScreenshotUrl, sensiScreenshotUrl] = await Promise.all([
-    getDownloadURL(hudUpload.ref),
-    getDownloadURL(sensiUpload.ref),
-  ])
-  return { hudScreenshotUrl, sensiScreenshotUrl }
-}
-
-export async function createOrder({ user, form, plan, payment, hudScreenshot, sensiScreenshot, orderId = createOrderId() }) {
-  if (!user?.uid) throw new Error('Sign in before placing an order.')
-  const screenshots = await uploadOrderScreenshots({ uid: user.uid, orderId, hudScreenshot, sensiScreenshot })
-  const order = {
-    orderId,
-    uid: user.uid,
-    customerName: form.customerName.trim(),
-    email: user.email.trim(),
+export async function createOrder({ user, form, plan, payment, orderId = createOrderId() }) {
+  assertSupabaseConfigured()
+  if (!user?.email) throw new Error('Sign in before placing an order.')
+  const payload = {
+    order_id: orderId,
+    user_email: user.email.trim().toLowerCase(),
+    customer_name: form.customerName.trim(),
     phone: form.phone.trim(),
-    deviceName: form.deviceName.trim(),
-    deviceModel: form.deviceModel.trim(),
+    device_name: form.deviceName.trim(),
+    device_model: form.deviceModel.trim(),
     ram: form.ram.trim(),
-    androidVersion: form.androidVersion.trim(),
-    gameName: form.gameName.trim(),
+    android_version: form.androidVersion.trim(),
+    game_name: form.gameName.trim(),
     plan: plan.id,
     amount: Number(plan.price),
-    paymentProvider: payment.paymentProvider || 'manual_upi',
-    paymentId: payment.paymentId.trim(),
-    paymentStatus: 'Pending',
-    orderStatus: 'Pending',
-    hudScreenshotUrl: screenshots.hudScreenshotUrl,
-    sensiScreenshotUrl: screenshots.sensiScreenshotUrl,
-    createdAt: serverTimestamp(),
-    updatedAt: serverTimestamp(),
+    payment_id: payment.paymentId.trim(),
+    payment_status: 'Pending',
+    order_status: 'Pending',
   }
-  await setDoc(doc(db, 'orders', orderId), order)
-  const storedOrder = { ...order, id: orderId, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() }
-  saveStoredOrder(storedOrder)
-  return storedOrder
+  const { data, error } = await supabase.from('orders').insert(payload).select('*').single()
+  if (error) throw error
+  return normalizeOrder(data)
 }
 
-export function subscribeToUserOrders(uid, onOrders, onError) {
-  const customerOrders = query(collection(db, 'orders'), where('uid', '==', uid))
-  return onSnapshot(customerOrders, (snapshot) => {
-    const orders = snapshot.docs.map((item) => normalizeOrder(item.id, item.data()))
-      .sort((a, b) => timestampMillis(b.createdAt) - timestampMillis(a.createdAt))
-    onOrders(orders)
-  }, onError)
+export async function getUserOrders(email) {
+  assertSupabaseConfigured()
+  if (!email?.trim()) throw new Error('A customer email is required to load orders.')
+  const { data, error } = await supabase.from('orders').select('*').eq('user_email', email.trim().toLowerCase()).order('created_at', { ascending: false })
+  if (error) throw error
+  return (data || []).map(normalizeOrder)
 }
 
-export async function updateAdminOrder(orderId, changes) {
-  const allowed = {}
-  if (changes.paymentStatus && PAYMENT_STATUSES.includes(changes.paymentStatus)) allowed.paymentStatus = changes.paymentStatus
-  if (changes.orderStatus && ORDER_STATUSES.includes(changes.orderStatus)) allowed.orderStatus = changes.orderStatus
-  if (!Object.keys(allowed).length) throw new Error('No valid order changes were provided.')
-  await updateDoc(doc(db, 'orders', orderId), { ...allowed, updatedAt: serverTimestamp() })
-  const existing = getStoredOrders().find((order) => order.id === orderId || order.orderId === orderId)
-  if (existing) saveStoredOrder({ ...existing, ...allowed, updatedAt: new Date().toISOString() })
-  return { orderId, ...allowed }
+export async function getAllOrders() {
+  assertSupabaseConfigured()
+  const { data, error } = await supabase.from('orders').select('*').order('created_at', { ascending: false })
+  if (error) throw error
+  return (data || []).map(normalizeOrder)
 }
 
-export async function resolveScreenshotUrl(value) {
-  if (!value) return ''
-  if (/^https:\/\//i.test(value)) return value
-  return getDownloadURL(ref(storage, value))
+export async function updateAdminOrder(id, changes) {
+  assertSupabaseConfigured()
+  const payload = { updated_at: new Date().toISOString() }
+  if (changes.paymentStatus && PAYMENT_STATUSES.includes(changes.paymentStatus)) payload.payment_status = changes.paymentStatus
+  if (changes.orderStatus && ORDER_STATUSES.includes(changes.orderStatus)) payload.order_status = changes.orderStatus
+  if (Object.keys(payload).length === 1) throw new Error('No valid order changes were provided.')
+  const { data, error } = await supabase.from('orders').update(payload).eq('id', id).select('*').single()
+  if (error) throw error
+  return normalizeOrder(data)
 }
 
 export async function copyCustomerValue(value, label) {
@@ -124,41 +74,26 @@ export function getDeliveryMessage(order) {
   return 'UPI payment submitted. An admin will verify the transaction before processing your order.'
 }
 
-function normalizeOrder(id, data) {
-  const plan = String(data.plan || '').toLowerCase()
+export function normalizeOrder(row) {
+  const plan = String(row.plan || '').toLowerCase()
   return {
-    id,
-    ...data,
-    orderId: data.orderId || id,
-    uid: data.uid || data.userId || '',
-    customerName: data.customerName || data.name || 'Unknown customer',
-    phone: data.phone || data.whatsapp || '',
+    id: row.id,
+    orderId: row.order_id,
+    email: row.user_email,
+    customerName: row.customer_name,
+    phone: row.phone,
+    deviceName: row.device_name,
+    deviceModel: row.device_model,
+    ram: row.ram,
+    androidVersion: row.android_version,
+    gameName: row.game_name,
     plan,
-    planName: data.planName || (plan === 'premium' ? 'Premium Sensi' : 'Normal Sensi'),
-    paymentStatus: normalizePaymentStatus(data.paymentStatus),
-    orderStatus: normalizeOrderStatus(data.orderStatus || data.status),
-    hudScreenshotUrl: data.hudScreenshotUrl || data.hudScreenshot || '',
-    sensiScreenshotUrl: data.sensiScreenshotUrl || data.sensiScreenshot || data.currentSensitivityUrl || '',
+    planName: plan === 'premium' ? 'Premium Sensi' : 'Normal Sensi',
+    amount: Number(row.amount || 0),
+    paymentId: row.payment_id,
+    paymentStatus: row.payment_status || 'Pending',
+    orderStatus: row.order_status || 'Pending',
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
   }
-}
-
-function normalizePaymentStatus(status) {
-  const value = String(status || '').toUpperCase()
-  if (['PAID', 'SUCCESS', 'COMPLETED'].includes(value)) return 'Paid'
-  if (['FAILED', 'CANCELLED', 'INITIATION_FAILED'].includes(value)) return 'Failed'
-  return 'Pending'
-}
-
-function normalizeOrderStatus(status) {
-  const value = String(status || '').toLowerCase()
-  if (value === 'delivered') return 'Delivered'
-  if (value === 'processing') return 'Processing'
-  return 'Pending'
-}
-
-function timestampMillis(value) {
-  if (value?.toMillis) return value.toMillis()
-  if (value instanceof Date) return value.getTime()
-  const parsed = new Date(value).getTime()
-  return Number.isNaN(parsed) ? 0 : parsed
 }

@@ -1,61 +1,39 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { createUserWithEmailAndPassword, onAuthStateChanged, sendPasswordResetEmail, signInWithEmailAndPassword, signOut, updateProfile } from 'firebase/auth'
-import { doc, serverTimestamp, setDoc } from 'firebase/firestore'
-import { auth, db } from '../firebase'
 import { AuthContext } from './auth-context'
+import { getCurrentUser, loginUser, logoutUser, registerUser, restoreSession, sendPasswordReset } from '../services/authService'
 import { isAdmin as checkIsAdmin } from '../utils/adminAuth'
-import { registerUser } from '../services/authService'
 
 export function AuthProvider({ children }) {
-  const [user, setUser] = useState(null)
+  const [user, setUser] = useState(() => getCurrentUser())
   const [loading, setLoading] = useState(true)
 
-  useEffect(() => onAuthStateChanged(auth, (nextUser) => {
-    if (nextUser && !checkIsAdmin(nextUser)) registerUser({
-      id: nextUser.uid,
-      name: nextUser.displayName || '',
-      email: nextUser.email,
-      phone: '',
-      password: '',
-      role: 'customer',
-      createdAt: nextUser.metadata?.creationTime,
-    })
-    setUser(nextUser)
-    setLoading(false)
-  }, () => {
-    setUser(null)
-    setLoading(false)
-  }), [])
-
-  const signup = useCallback(async ({ name, email, phone, password }) => {
-    const credential = await createUserWithEmailAndPassword(auth, email.trim(), password)
-    const cleanName = name.trim()
-    await updateProfile(credential.user, { displayName: cleanName })
-    if (!checkIsAdmin(credential.user)) registerUser({
-      id: credential.user.uid,
-      name: cleanName,
-      email: credential.user.email,
-      phone: String(phone || '').trim(),
-      password: '',
-      role: 'customer',
-      createdAt: credential.user.metadata?.creationTime,
-    })
-    await setDoc(doc(db, 'users', credential.user.uid), {
-      uid: credential.user.uid,
-      name: cleanName,
-      email: credential.user.email,
-      phone: String(phone || '').trim(),
-      createdAt: serverTimestamp(),
-      updatedAt: serverTimestamp(),
-    }, { merge: true })
-    return credential.user
+  useEffect(() => {
+    let active = true
+    restoreSession()
+      .then((nextUser) => { if (active) setUser(nextUser) })
+      .catch((error) => {
+        console.error('Supabase session restore failed:', error)
+        if (active) setUser(null)
+      })
+      .finally(() => { if (active) setLoading(false) })
+    return () => { active = false }
   }, [])
 
-  const login = useCallback(async (email, password) => (
-    await signInWithEmailAndPassword(auth, email.trim(), password)
-  ).user, [])
-  const logout = useCallback(() => signOut(auth), [])
-  const resetPassword = useCallback((email) => sendPasswordResetEmail(auth, email.trim()), [])
+  const signup = useCallback(async (form) => {
+    const nextUser = await registerUser(form)
+    if (!nextUser.emailConfirmationRequired) setUser(nextUser)
+    return nextUser
+  }, [])
+  const login = useCallback(async (email, password) => {
+    const nextUser = await loginUser(email, password)
+    setUser(nextUser)
+    return nextUser
+  }, [])
+  const logout = useCallback(async () => {
+    await logoutUser()
+    setUser(null)
+  }, [])
+  const resetPassword = useCallback((email) => sendPasswordReset(email), [])
 
   const value = useMemo(() => {
     const admin = checkIsAdmin(user)

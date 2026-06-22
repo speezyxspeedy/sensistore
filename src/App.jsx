@@ -13,7 +13,6 @@ const AdminDashboard = lazy(() => import('./pages/AdminDashboard'))
 const Pricing = lazy(() => import('./pages/Pricing'))
 const Account = lazy(() => import('./pages/Account'))
 const Dashboard = lazy(() => import('./pages/Dashboard'))
-const PaymentReturn = lazy(() => import('./pages/PaymentReturn'))
 const Contact = lazy(() => import('./pages/Contact'))
 const Legal = lazy(() => import('./pages/Legal'))
 
@@ -29,7 +28,6 @@ export default function App() {
             <Route path="/" element={<Home />} />
             <Route path="/pricing" element={<Pricing />} />
             <Route path="/order" element={<ProtectedRoute><Order /></ProtectedRoute>} />
-            <Route path="/payment/return" element={<ProtectedRoute><PaymentReturn /></ProtectedRoute>} />
             <Route path="/payment" element={<Navigate to="/order" replace />} />
             <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
             <Route path="/account" element={<Account />} />
