@@ -26,6 +26,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { toast } from 'react-toastify'
 import { useAuth } from '../contexts/auth-context'
+import { PLAN_AMOUNTS } from '../config/paymentConfig'
 import { getUsers } from '../services/authService'
 import { copyCustomerValue, getAllOrders, updateAdminOrder } from '../services/orderService'
 
@@ -116,7 +117,7 @@ export default function AdminDashboard() {
     pendingPayments: orders.filter((order) => order.paymentStatus === 'Pending').length,
     revenue: orders
       .filter((order) => order.paymentStatus === 'Paid')
-      .reduce((sum, order) => sum + packagePrice(order.plan), 0),
+      .reduce((sum, order) => sum + (order.amount ?? PLAN_AMOUNTS[order.plan] ?? 0), 0),
   }), [users.length, orders])
 
   const updateOrder = async (order, changes, type) => {
@@ -186,10 +187,10 @@ export default function AdminDashboard() {
           {loading ? <LoadingState /> : filteredOrders.length === 0 ? <EmptyState label="No matching orders" /> : (
             <>
               <div className="hidden overflow-x-auto xl:block">
-                <table className="w-full min-w-[2500px] text-left">
+                <table className="w-full min-w-[2650px] text-left">
                   <thead>
                     <tr className="border-b border-white/[0.06] text-[9px] uppercase tracking-[.12em] text-slate-600">
-                      {['Order ID', 'Customer Name', 'Email', 'WhatsApp Number', 'Device Name', 'Device Model', 'RAM', 'Game Name', 'Selected Plan', 'Sensi Package', 'Amount', 'UTR / Transaction ID', 'Payment Status', 'Order Status', 'Order Date', 'Actions'].map((column) => <th key={column} className="whitespace-nowrap px-4 py-4">{column}</th>)}
+                      {['Order ID', 'Customer Name', 'Email', 'WhatsApp Number', 'Device Name', 'Device Model', 'RAM', 'Android Version', 'Game Name', 'Selected Plan', 'Sensi Package', 'Amount', 'UTR / Transaction ID', 'Payment Status', 'Order Status', 'Order Date', 'Actions'].map((column) => <th key={column} className="whitespace-nowrap px-4 py-4">{column}</th>)}
                     </tr>
                   </thead>
                   <tbody>{filteredOrders.map((order) => <OrderRow key={order.id} order={order} onView={setSelectedOrder} />)}</tbody>
@@ -241,6 +242,7 @@ function OrderRow({ order, onView }) {
       <td className="px-4 py-4 text-slate-300">{displayValue(order.deviceName)}</td>
       <td className="px-4 py-4 text-slate-300">{displayValue(order.deviceModel)}</td>
       <td className="whitespace-nowrap px-4 py-4 text-slate-400">{displayValue(order.ram)}</td>
+      <td className="whitespace-nowrap px-4 py-4 text-slate-400">{displayValue(order.androidVersion)}</td>
       <td className="px-4 py-4 text-slate-300">{displayValue(order.gameName)}</td>
       <td className="capitalize px-4 py-4 text-slate-400">{displayValue(order.plan)}</td>
       <td className="whitespace-nowrap px-4 py-4"><PackageBadge order={order} /></td>
@@ -265,7 +267,8 @@ function OrderCard({ order, onView }) {
         <MobileField label="Package" value={packageLabel(order)} />
         <MobileField label="Device" value={[order.deviceName, order.deviceModel].filter(Boolean).join(' ')} />
         <MobileField label="Game / RAM" value={[order.gameName, order.ram].filter(Boolean).join(' · ')} />
-        <MobileField label="UTR" value={order.paymentId} />
+        <MobileField label="Android Version" value={order.androidVersion} />
+        <MobileField label="UTR / Transaction ID" value={order.paymentId} />
       </div>
       <div className="mt-4 flex flex-wrap gap-2"><StatusBadge type="payment" value={order.paymentStatus} /><StatusBadge type="order" value={order.orderStatus} /></div>
       <button onClick={() => onView(order)} className="btn-secondary mt-4 w-full !py-2.5"><Eye size={15} /> View Order</button>
@@ -316,7 +319,7 @@ function OrderDetails({ order, updating, onUpdate, onClose }) {
             ['Amount', formatAmount(order.amount)],
           ]} onCopy={copy} />
           <InfoSection icon={CreditCard} title="Payment Information" items={[
-            ['UTR Number', order.paymentId, true],
+            ['UTR / Transaction ID', order.paymentId, true],
             ['Payment Status', order.paymentStatus],
           ]} onCopy={copy} />
           <InfoSection icon={PackageCheck} title="Delivery Information" items={[
@@ -376,15 +379,9 @@ function EmptyState({ label }) {
   return <div className="grid min-h-52 place-items-center text-center"><div><FileText className="mx-auto text-slate-700" size={36} /><p className="mt-3 text-sm text-slate-400">{label}</p></div></div>
 }
 
-function packagePrice(plan) {
-  if (plan === 'premium') return 499
-  if (plan === 'normal') return 199
-  return 0
-}
-
 function packageLabel(order) {
-  if (order.plan === 'premium') return 'Premium Sensi ₹499'
-  if (order.plan === 'normal') return 'Normal Sensi ₹199'
+  if (order.plan === 'premium') return `Premium Sensi ₹${PLAN_AMOUNTS.premium}`
+  if (order.plan === 'normal') return `Normal Sensi ₹${PLAN_AMOUNTS.normal}`
   return '-'
 }
 

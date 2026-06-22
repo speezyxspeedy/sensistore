@@ -23,6 +23,8 @@ drop function if exists public.handle_new_user();
 create table if not exists public.orders (
   id uuid primary key default gen_random_uuid(),
   order_id text unique not null,
+  email text not null,
+  -- Retained as a compatibility mirror for older app deployments.
   user_email text not null,
   customer_name text not null,
   phone text not null,
@@ -41,6 +43,13 @@ create table if not exists public.orders (
   updated_at timestamptz not null default now()
 );
 
+alter table public.orders add column if not exists email text;
+update public.orders
+set email = lower(trim(user_email))
+where email is null or trim(email) = '';
+update public.orders
+set email = lower(trim(email)), user_email = lower(trim(email));
+alter table public.orders alter column email set not null;
 alter table public.orders add column if not exists notes text not null default '';
 
 -- Remove the previous custom-session RPC layer if it was installed.
@@ -91,7 +100,9 @@ create policy "orders direct select" on public.orders for select to anon, authen
   using (true);
 create policy "orders direct insert" on public.orders for insert to anon, authenticated
   with check (
-    exists (select 1 from public.users u where lower(u.email) = lower(user_email))
+    email = lower(trim(email))
+    and user_email = email
+    and exists (select 1 from public.users u where lower(u.email) = email)
     and ((plan = 'normal' and amount = 199) or (plan = 'premium' and amount = 499))
     and char_length(trim(payment_id)) between 6 and 80
     and payment_status = 'Pending'
@@ -137,6 +148,7 @@ create trigger set_orders_updated_at before update on public.orders
 for each row execute procedure public.set_order_updated_at();
 
 create index if not exists orders_user_email_idx on public.orders (lower(user_email));
+create index if not exists orders_email_idx on public.orders (lower(email));
 create index if not exists orders_created_at_idx on public.orders (created_at desc);
 
 -- Run separately in the SQL Editor with your chosen admin password:

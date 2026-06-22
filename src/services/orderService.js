@@ -1,4 +1,5 @@
 import { assertSupabaseConfigured, supabase } from '../lib/supabase'
+import { PLAN_AMOUNTS } from '../config/paymentConfig'
 
 export const PAYMENT_STATUSES = ['Pending', 'Paid', 'Failed']
 export const ORDER_STATUSES = ['Pending', 'Processing', 'Delivered']
@@ -10,12 +11,31 @@ export function createOrderId() {
   return `SS-${date}-${suffix}`
 }
 
-export async function createOrder({ user, form, plan, payment, orderId = createOrderId() }) {
+export async function createOrder({ user, form, plan, orderId = createOrderId() }) {
   assertSupabaseConfigured()
   if (!user?.email) throw new Error('Sign in before placing an order.')
+  if (!plan?.id || !Object.prototype.hasOwnProperty.call(PLAN_AMOUNTS, plan.id)) throw new Error('Select a valid plan before submitting your order.')
+
+  const requiredFields = [
+    ['Full name', form.customerName],
+    ['WhatsApp number', form.phone],
+    ['Device name', form.deviceName],
+    ['Device model', form.deviceModel],
+    ['RAM', form.ram],
+    ['Android version', form.androidVersion],
+    ['Game name', form.gameName],
+  ]
+  const missingField = requiredFields.find(([, value]) => !String(value || '').trim())
+  if (missingField) throw new Error(`${missingField[0]} is required.`)
+
+  const transactionId = String(form.paymentId || '').trim()
+  if (!/^[A-Za-z0-9._-]{6,80}$/.test(transactionId)) throw new Error('Enter a valid UTR / Transaction ID with 6 to 80 letters or numbers.')
+  const customerEmail = user.email.trim().toLowerCase()
+
   const orderData = {
     order_id: orderId,
-    user_email: user.email.trim().toLowerCase(),
+    email: customerEmail,
+    user_email: customerEmail,
     customer_name: form.customerName.trim(),
     phone: form.phone.trim(),
     device_name: form.deviceName.trim(),
@@ -24,31 +44,29 @@ export async function createOrder({ user, form, plan, payment, orderId = createO
     android_version: form.androidVersion.trim(),
     game_name: form.gameName.trim(),
     plan: plan.id,
-    amount: Number(plan.price),
-    payment_id: payment.paymentId.trim(),
+    amount: PLAN_AMOUNTS[plan.id],
+    payment_id: transactionId,
     payment_status: 'Pending',
     order_status: 'Pending',
     created_at: new Date().toISOString(),
   }
-  console.log("Creating order", orderData)
-  const result = await supabase.from('orders').insert(orderData).select('*').single()
-  console.log("Order insert result", result)
-  if (result.error) throw result.error
-  if (!result.data) throw new Error('Supabase did not return the created order.')
-  return normalizeOrder(result.data)
+  const { data, error } = await supabase.schema('public').from('orders').insert(orderData).select('*').single()
+  if (error) throw error
+  if (!data) throw new Error('Supabase did not return the created order.')
+  return normalizeOrder(data)
 }
 
 export async function getUserOrders(email) {
   assertSupabaseConfigured()
   if (!email?.trim()) throw new Error('A customer email is required to load orders.')
-  const { data, error } = await supabase.from('orders').select('*').eq('user_email', email.trim().toLowerCase()).order('created_at', { ascending: false })
+  const { data, error } = await supabase.schema('public').from('orders').select('*').eq('email', email.trim().toLowerCase()).order('created_at', { ascending: false })
   if (error) throw error
   return (data || []).map(normalizeOrder)
 }
 
 export async function getAllOrders() {
   assertSupabaseConfigured()
-  const { data, error } = await supabase.from('orders').select('*').order('created_at', { ascending: false })
+  const { data, error } = await supabase.schema('public').from('orders').select('*').order('created_at', { ascending: false })
   if (error) throw error
   return (data || []).map(normalizeOrder)
 }
@@ -60,7 +78,7 @@ export async function updateAdminOrder(id, changes) {
   if (changes.orderStatus && ORDER_STATUSES.includes(changes.orderStatus)) payload.order_status = changes.orderStatus
   if (Object.prototype.hasOwnProperty.call(changes, 'notes')) payload.notes = String(changes.notes || '').trim().slice(0, 2000)
   if (Object.keys(payload).length === 1) throw new Error('No valid order changes were provided.')
-  const { data, error } = await supabase.from('orders').update(payload).eq('id', id).select('*').single()
+  const { data, error } = await supabase.schema('public').from('orders').update(payload).eq('id', id).select('*').single()
   if (error) throw error
   return normalizeOrder(data)
 }
@@ -86,7 +104,7 @@ export function normalizeOrder(row) {
   return {
     id: row.id,
     orderId: row.order_id || '',
-    email: row.user_email || row.email || '',
+    email: row.email || row.user_email || '',
     customerName: row.customer_name || '',
     phone: row.phone || '',
     deviceName: row.device_name || '',
