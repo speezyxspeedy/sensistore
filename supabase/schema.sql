@@ -1,16 +1,24 @@
 create extension if not exists pgcrypto;
+set search_path = public, extensions;
 
 create table if not exists public.users (
-  id uuid primary key references auth.users(id) on delete cascade,
+  id uuid primary key default gen_random_uuid(),
   name text not null default '',
   email text unique not null,
   phone text not null default '',
-  -- Passwords are verified by Supabase Auth and are never stored here.
-  -- This nullable column remains only to match the requested table shape.
+  -- Browser-generated PBKDF2 hashes are stored here. Plaintext passwords are not stored.
   password text,
   role text not null default 'customer' check (role in ('customer', 'admin')),
   created_at timestamptz not null default now()
 );
+
+alter table public.users drop constraint if exists users_id_fkey;
+alter table public.users alter column id set default gen_random_uuid();
+update public.users set email = lower(trim(email));
+update public.users set role = 'admin' where email = 'bglspeedy@gmail.com';
+
+drop trigger if exists on_auth_user_created on auth.users;
+drop function if exists public.handle_new_user();
 
 create table if not exists public.orders (
   id uuid primary key default gen_random_uuid(),
@@ -32,80 +40,86 @@ create table if not exists public.orders (
   updated_at timestamptz not null default now()
 );
 
+-- Remove the previous custom-session RPC layer if it was installed.
+drop function if exists public.register_store_user(text, text, text, text);
+drop function if exists public.login_store_user(text, text);
+drop function if exists public.restore_store_session(text);
+drop function if exists public.logout_store_session(text);
+drop function if exists public.list_store_users(text);
+drop function if exists public.create_store_order(text, text, text, text, text, text, text, text, text, text, integer, text);
+drop function if exists public.list_store_orders(text);
+drop function if exists public.list_all_store_orders(text);
+drop function if exists public.update_store_order(text, uuid, text, text);
+drop function if exists public.assert_store_admin(text);
+drop function if exists public.store_session_user(text);
+drop function if exists public.issue_store_session(uuid);
+drop table if exists public.user_sessions;
+drop function if exists public.is_store_admin();
+
 alter table public.users enable row level security;
 alter table public.orders enable row level security;
-
-create or replace function public.is_store_admin()
-returns boolean language sql stable as $$
-  select lower(coalesce(auth.jwt() ->> 'email', '')) = 'bglspeedy@gmail.com';
-$$;
 
 drop policy if exists "users read own or admin" on public.users;
 drop policy if exists "users insert own" on public.users;
 drop policy if exists "users update own or admin" on public.users;
+drop policy if exists "users direct select" on public.users;
+drop policy if exists "users direct signup" on public.users;
 drop policy if exists "orders read own or admin" on public.orders;
 drop policy if exists "orders insert own" on public.orders;
 drop policy if exists "orders admin update" on public.orders;
+drop policy if exists "orders direct select" on public.orders;
+drop policy if exists "orders direct insert" on public.orders;
+drop policy if exists "orders direct update" on public.orders;
 
-create policy "users read own or admin" on public.users for select
-  using (id = auth.uid() or public.is_store_admin());
-create policy "users insert own" on public.users for insert
+grant select, insert on table public.users to anon, authenticated;
+grant select, insert, update on table public.orders to anon, authenticated;
+
+-- Required by the requested browser-only users-table signup/login flow.
+create policy "users direct select" on public.users for select to anon, authenticated
+  using (true);
+create policy "users direct signup" on public.users for insert to anon, authenticated
   with check (
-    id = auth.uid()
-    and lower(email) = lower(coalesce(auth.jwt() ->> 'email', ''))
-    and password is null
-    and (role = 'customer' or public.is_store_admin())
-  );
-create policy "users update own or admin" on public.users for update
-  using (id = auth.uid() or public.is_store_admin())
-  with check (
-    public.is_store_admin()
-    or (
-      id = auth.uid()
-      and lower(email) = lower(coalesce(auth.jwt() ->> 'email', ''))
-      and role = 'customer'
-      and password is null
-    )
+    role = 'customer'
+    and lower(email) <> 'bglspeedy@gmail.com'
+    and password like 'pbkdf2$%'
   );
 
-create policy "orders read own or admin" on public.orders for select
-  using (lower(user_email) = lower(coalesce(auth.jwt() ->> 'email', '')) or public.is_store_admin());
-create policy "orders insert own" on public.orders for insert
+create policy "orders direct select" on public.orders for select to anon, authenticated
+  using (true);
+create policy "orders direct insert" on public.orders for insert to anon, authenticated
   with check (
-    lower(user_email) = lower(coalesce(auth.jwt() ->> 'email', ''))
-    and (
-      (plan = 'normal' and amount = 199)
-      or (plan = 'premium' and amount = 499)
-    )
+    exists (select 1 from public.users u where lower(u.email) = lower(user_email))
+    and ((plan = 'normal' and amount = 199) or (plan = 'premium' and amount = 499))
     and char_length(trim(payment_id)) between 6 and 80
     and payment_status = 'Pending'
     and order_status = 'Pending'
   );
-create policy "orders admin update" on public.orders for update
-  using (public.is_store_admin()) with check (public.is_store_admin());
+create policy "orders direct update" on public.orders for update to anon, authenticated
+  using (true) with check (true);
 
-create or replace function public.handle_new_user()
-returns trigger language plpgsql security definer set search_path = public as $$
+create or replace function public.initialize_store_admin(p_password text)
+returns void
+language plpgsql
+security definer
+set search_path = public, extensions
+as $$
 begin
-  insert into public.users (id, name, email, phone, password, role)
+  if char_length(coalesce(p_password, '')) < 10 or char_length(p_password) > 128 then
+    raise exception 'Admin password must contain 10 to 128 characters.' using errcode = 'P0001';
+  end if;
+  insert into public.users (name, email, phone, password, role)
   values (
-    new.id,
-    coalesce(new.raw_user_meta_data ->> 'name', ''),
-    lower(new.email),
-    coalesce(new.raw_user_meta_data ->> 'phone', ''),
-    null,
-    case when lower(new.email) = 'bglspeedy@gmail.com' then 'admin' else 'customer' end
-  ) on conflict (id) do update set
-    name = excluded.name,
-    email = excluded.email,
-    phone = excluded.phone;
-  return new;
+    'Sensi Store Admin',
+    'bglspeedy@gmail.com',
+    '',
+    'sha256:' || encode(digest(p_password, 'sha256'), 'hex'),
+    'admin'
+  )
+  on conflict (email) do update set password = excluded.password, role = 'admin';
 end;
 $$;
 
-drop trigger if exists on_auth_user_created on auth.users;
-create trigger on_auth_user_created after insert or update on auth.users
-for each row execute procedure public.handle_new_user();
+revoke all on function public.initialize_store_admin(text) from public, anon, authenticated;
 
 create or replace function public.set_order_updated_at()
 returns trigger language plpgsql as $$
@@ -121,3 +135,8 @@ for each row execute procedure public.set_order_updated_at();
 
 create index if not exists orders_user_email_idx on public.orders (lower(user_email));
 create index if not exists orders_created_at_idx on public.orders (created_at desc);
+
+-- Run separately in the SQL Editor with your chosen admin password:
+-- select public.initialize_store_admin('replace-with-a-strong-admin-password');
+-- If an old Auth-created customer row has a null password, delete that one row before signing up again.
+notify pgrst, 'reload schema';

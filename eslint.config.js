@@ -29,4 +29,8 @@ export default [
     files: ['api/**/*.js'],
     languageOptions: { globals: globals.node },
   },
+  {
+    files: ['vite.config.js'],
+    languageOptions: { globals: globals.node },
+  },
 ]

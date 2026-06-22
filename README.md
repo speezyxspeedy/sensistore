@@ -1,14 +1,15 @@
 # Sensi Store
 
-React + Vite storefront backed by Supabase Authentication and PostgreSQL. Customer profiles and orders are stored in Supabase, while the browser keeps only the active login session.
+React + Vite storefront backed by Supabase PostgreSQL. Customer accounts and orders are stored in Supabase, while the current public user profile is kept in browser localStorage.
 
 ## Supabase setup
 
 1. Create a Supabase project.
-2. Open the SQL editor and run `supabase/schema.sql` once. The script creates the tables, profile trigger, indexes, and row-level security policies.
-3. In Authentication settings, enable Email/Password. Add the production Render hostname to the allowed redirect URLs when email confirmation or password reset is enabled.
-4. Create the admin account with `bglspeedy@gmail.com` in Supabase Authentication. The SQL trigger assigns its admin profile automatically.
-5. Copy `.env.example` to `.env.local` and set the project URL and publishable/anon key. Never put a Supabase secret or service-role key in a `VITE_` variable.
+2. Open the SQL editor and run `supabase/schema.sql`. The script creates the users/orders tables and the direct-table policies required by this frontend-only login flow.
+3. In the SQL editor, initialize the locked admin email with your own strong password: `select public.initialize_store_admin('replace-with-a-strong-admin-password');`
+4. Copy `.env.example` to `.env.local` and set the project URL and publishable/anon key. Never put a Supabase secret or service-role key in a `VITE_` variable.
+
+Supabase Auth email confirmation and signup/login RPCs are not used. Existing Supabase Auth passwords cannot be imported because providers never expose password hashes; existing users must create a new application account after this migration.
 
 ## Local development
 
@@ -31,7 +32,7 @@ Create a Render Static Site with:
 
 ## Data and security
 
-- Supabase Auth verifies passwords; plaintext passwords are never written to `public.users`.
-- Row-level security limits customers to their own profile and orders.
+- Customer passwords are PBKDF2-derived in the browser before insertion; plaintext passwords are not stored.
+- This requested direct-table/localStorage flow is suitable only for a lightweight prototype. Because it has no trusted server-side identity, it cannot provide strong tenant isolation or server-enforced administrator authorization.
 - Only the authenticated `bglspeedy@gmail.com` account can list all users/orders or change payment and delivery statuses.
 - Manual UPI orders start with `Pending` payment and order statuses. The admin dashboard can mark payment as Pending, Paid, or Failed and an order as Pending, Processing, or Delivered.
