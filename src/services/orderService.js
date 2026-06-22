@@ -13,7 +13,7 @@ export function createOrderId() {
 export async function createOrder({ user, form, plan, payment, orderId = createOrderId() }) {
   assertSupabaseConfigured()
   if (!user?.email) throw new Error('Sign in before placing an order.')
-  const payload = {
+  const orderData = {
     order_id: orderId,
     user_email: user.email.trim().toLowerCase(),
     customer_name: form.customerName.trim(),
@@ -28,10 +28,14 @@ export async function createOrder({ user, form, plan, payment, orderId = createO
     payment_id: payment.paymentId.trim(),
     payment_status: 'Pending',
     order_status: 'Pending',
+    created_at: new Date().toISOString(),
   }
-  const { data, error } = await supabase.from('orders').insert(payload).select('*').single()
-  if (error) throw error
-  return normalizeOrder(data)
+  console.log("Creating order", orderData)
+  const result = await supabase.from('orders').insert(orderData).select('*').single()
+  console.log("Order insert result", result)
+  if (result.error) throw result.error
+  if (!result.data) throw new Error('Supabase did not return the created order.')
+  return normalizeOrder(result.data)
 }
 
 export async function getUserOrders(email) {
