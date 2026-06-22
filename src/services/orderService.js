@@ -54,6 +54,7 @@ export async function updateAdminOrder(id, changes) {
   const payload = { updated_at: new Date().toISOString() }
   if (changes.paymentStatus && PAYMENT_STATUSES.includes(changes.paymentStatus)) payload.payment_status = changes.paymentStatus
   if (changes.orderStatus && ORDER_STATUSES.includes(changes.orderStatus)) payload.order_status = changes.orderStatus
+  if (Object.prototype.hasOwnProperty.call(changes, 'notes')) payload.notes = String(changes.notes || '').trim().slice(0, 2000)
   if (Object.keys(payload).length === 1) throw new Error('No valid order changes were provided.')
   const { data, error } = await supabase.from('orders').update(payload).eq('id', id).select('*').single()
   if (error) throw error
@@ -75,25 +76,28 @@ export function getDeliveryMessage(order) {
 }
 
 export function normalizeOrder(row) {
-  const plan = String(row.plan || '').toLowerCase()
+  const rawPlan = String(row.plan || '').trim().toLowerCase()
+  const plan = ['normal', 'premium'].includes(rawPlan) ? rawPlan : ''
+  const numericAmount = Number(row.amount)
   return {
     id: row.id,
-    orderId: row.order_id,
-    email: row.user_email,
-    customerName: row.customer_name,
-    phone: row.phone,
-    deviceName: row.device_name,
-    deviceModel: row.device_model,
-    ram: row.ram,
-    androidVersion: row.android_version,
-    gameName: row.game_name,
+    orderId: row.order_id || '',
+    email: row.user_email || row.email || '',
+    customerName: row.customer_name || '',
+    phone: row.phone || '',
+    deviceName: row.device_name || '',
+    deviceModel: row.device_model || '',
+    ram: row.ram || '',
+    androidVersion: row.android_version || '',
+    gameName: row.game_name || '',
     plan,
-    planName: plan === 'premium' ? 'Premium Sensi' : 'Normal Sensi',
-    amount: Number(row.amount || 0),
-    paymentId: row.payment_id,
-    paymentStatus: row.payment_status || 'Pending',
-    orderStatus: row.order_status || 'Pending',
-    createdAt: row.created_at,
-    updatedAt: row.updated_at,
+    planName: plan === 'premium' ? 'Premium Sensi' : plan === 'normal' ? 'Normal Sensi' : '',
+    amount: row.amount !== null && row.amount !== undefined && Number.isFinite(numericAmount) ? numericAmount : null,
+    paymentId: row.payment_id || '',
+    paymentStatus: row.payment_status || '',
+    orderStatus: row.order_status || '',
+    notes: row.notes || '',
+    createdAt: row.created_at || '',
+    updatedAt: row.updated_at || '',
   }
 }

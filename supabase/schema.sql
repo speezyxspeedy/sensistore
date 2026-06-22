@@ -36,9 +36,12 @@ create table if not exists public.orders (
   payment_id text not null,
   payment_status text not null default 'Pending' check (payment_status in ('Pending', 'Paid', 'Failed')),
   order_status text not null default 'Pending' check (order_status in ('Pending', 'Processing', 'Delivered')),
+  notes text not null default '',
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
+
+alter table public.orders add column if not exists notes text not null default '';
 
 -- Remove the previous custom-session RPC layer if it was installed.
 drop function if exists public.register_store_user(text, text, text, text);
@@ -95,7 +98,7 @@ create policy "orders direct insert" on public.orders for insert to anon, authen
     and order_status = 'Pending'
   );
 create policy "orders direct update" on public.orders for update to anon, authenticated
-  using (true) with check (true);
+  using (true) with check (char_length(notes) <= 2000);
 
 create or replace function public.initialize_store_admin(p_password text)
 returns void
